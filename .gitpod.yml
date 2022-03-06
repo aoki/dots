@@ -1,3 +1,6 @@
 tasks:
   - init: cargo build
     command: cargo watch -x run
+    env:
+      DOTS_HOME_DIR: test-home
+      DOTS_CONFIG_DIR: test-conf.d

@@ -8,3 +8,4 @@ description = "CLI for managing dot-files."
 
 [dependencies]
 clap = { version = "3.1.1", features = ["derive", "env"] }
+colored = "2.0.0"

@@ -1,4 +1,5 @@
 use clap::Parser;
+use colored::Colorize;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -26,6 +27,8 @@ struct Cli {
         default_value = "~"
     )]
     home: PathBuf,
+    // ignore lists
+    // ignores: str,
 }
 
 fn main() -> std::io::Result<()> {
@@ -34,27 +37,54 @@ fn main() -> std::io::Result<()> {
     let dot_dir_path = cli.path;
     let home_dir_path = cli.home;
 
-    println!("{:?}", dot_dir_path);
-    println!("{:?}", home_dir_path);
+    println!("");
+    println!(
+        "{} {}",
+        "Dotfile directory:".bold(),
+        &dot_dir_path.to_string_lossy().green()
+    );
+    println!(
+        "{} {}",
+        "Target home directory:".bold(),
+        &home_dir_path.to_string_lossy().green()
+    );
 
-    match fs::read_dir(dot_dir_path) {
-        Err(e) => println!("{:?}", e.kind()),
+    println!("");
+    println!("{}", "Dotfiles".bold());
+    match fs::read_dir(&dot_dir_path) {
+        Err(e) => eprintln!(
+            "'{}' {}: {}",
+            &dot_dir_path.to_string_lossy().bold().red(),
+            "Can't read dotfile directory".red(),
+            e
+        ),
         Ok(paths) => {
             for path in paths {
                 match path {
+                    Err(e) => eprintln!("{:?}, {}: {}", e, "Can't access a path".red(), e),
                     Ok(p) => {
-                        println!("{}", p.file_name().to_string_lossy().to_string());
+                        println!("{}", p.file_name().to_string_lossy());
+
                         let mut name = PathBuf::new();
                         name.push(&home_dir_path);
                         name.push(p.file_name());
-                        println!("{:?}", &name);
-                        fs::read_link(Path::new(&name)).is_err(println!("{:?}", &name););
+                        println!("\t=> {:?}", &name.to_string_lossy());
+                        match fs::read_link(Path::new(&name)) {
+                            Ok(p) => println!("Link: {:?}", p),
+                            Err(e) => println!(
+                                "{} is not symlinked yet.: {:?}",
+                                &name.to_string_lossy().red().bold(),
+                                e
+                            ),
+                        }
                     }
-                    Err(_) => (),
                 }
             }
         }
     }
+
+    println!("");
+    println!("{}", "---Read link test".bold());
 
     let test = Path::new("./foo.link");
     let x = fs::read_link(test)?;
