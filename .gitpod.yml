@@ -4,3 +4,4 @@ tasks:
     env:
       DOTS_HOME_DIR: test-home
       DOTS_CONFIG_DIR: test-conf.d
+      GITPOD_GIT_USER_EMAIL: aoki@aoki.dev
