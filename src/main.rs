@@ -1,7 +1,7 @@
 use clap::Parser;
 use colored::Colorize;
 use std::{
-    fs,
+    fs::{self},
     path::{Path, PathBuf},
 };
 
@@ -27,15 +27,24 @@ struct Cli {
         default_value = "~"
     )]
     home: PathBuf,
-    // ignore lists
-    // ignores: str,
+
+    #[clap(
+        short,
+        long,
+        value_name = "IGNORE_FILE_LIST",
+        env = "DOTS_IGNORE_FILES",
+        default_value = ".DS_Store,.gitignore"
+    )]
+    ignores: String,
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let dot_dir_path = cli.path;
     let home_dir_path = cli.home;
+    let ignore_file_list: Vec<&str> = cli.ignores.split(",").collect();
+    println!("{:?}", &ignore_file_list);
 
     println!("");
     println!(
@@ -71,7 +80,7 @@ fn main() -> std::io::Result<()> {
                         println!("\t=> {:?}", &name.to_string_lossy());
                         match fs::read_link(Path::new(&name)) {
                             Ok(p) => println!("Link: {:?}", p),
-                            Err(e) => println!(
+                            Err(e) => eprintln!(
                                 "{} is not symlinked yet.: {:?}",
                                 &name.to_string_lossy().red().bold(),
                                 e
@@ -89,5 +98,6 @@ fn main() -> std::io::Result<()> {
     let test = Path::new("./foo.link");
     let x = fs::read_link(test)?;
     println!("{:?}", x);
+
     Ok(())
 }
