@@ -14,7 +14,8 @@ struct Cli {
         parse(from_os_str),
         value_name = "CONFIG_DIRECTORY",
         env = "DOTS_CONFIG_DIR",
-        default_value = "."
+        // default_value = "."
+        default_value = "test-conf.d"
     )]
     path: PathBuf,
 
@@ -24,7 +25,8 @@ struct Cli {
         parse(from_os_str),
         value_name = "HOME_DIRECTORY",
         env = "DOTS_HOME_DIR",
-        default_value = "~"
+        // default_value = "`",
+        default_value = "test-home"
     )]
     home: PathBuf,
 
@@ -72,32 +74,25 @@ fn main() -> anyhow::Result<()> {
                 match path {
                     Err(e) => eprintln!("{:?}, {}: {}", e, "Can't access a path".red(), e),
                     Ok(p) => {
-                        println!("{}", p.file_name().to_string_lossy());
-
                         let mut name = PathBuf::new();
                         name.push(&home_dir_path);
                         name.push(p.file_name());
-                        println!("\t=> {:?}", &name.to_string_lossy());
                         match fs::read_link(Path::new(&name)) {
-                            Ok(p) => println!("Link: {:?}", p),
-                            Err(e) => eprintln!(
-                                "{} is not symlinked yet.: {:?}",
-                                &name.to_string_lossy().red().bold(),
-                                e
-                            ),
+                            Ok(p) => {
+                                println!(
+                                    "{} {}",
+                                    "✔︎".green().bold(),
+                                    p.file_name().unwrap().to_string_lossy()
+                                )
+                            }
+                            Err(_) => {
+                                println!("{} {}", "✖︎".red().bold(), p.file_name().to_string_lossy())
+                            }
                         }
                     }
                 }
             }
         }
     }
-
-    println!("");
-    println!("{}", "---Read link test".bold());
-
-    let test = Path::new("./foo.link");
-    let x = fs::read_link(test)?;
-    println!("{:?}", x);
-
     Ok(())
 }
