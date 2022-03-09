@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::{
     fs::{self},
@@ -38,6 +38,16 @@ struct Cli {
         default_value = ".DS_Store,.gitignore"
     )]
     ignores: String,
+
+    #[clap(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Test {},
+    Link {},
+    Unlink {},
 }
 
 fn main() -> anyhow::Result<()> {
@@ -59,6 +69,15 @@ fn main() -> anyhow::Result<()> {
         "Target home directory:".bold(),
         &home_dir_path.to_string_lossy().green()
     );
+
+    match &cli.command {
+        Commands::Test {} => println!("{}", "Show current link status".green()),
+        Commands::Link {} => println!(
+            "{}",
+            "Create symlink in home directory from dot config directory".green()
+        ),
+        Commands::Unlink {} => println!("{}", "Remove sysmlink in home directory".green()),
+    }
 
     println!("");
     println!("{}", "Dotfiles".bold());
