@@ -40,7 +40,7 @@ struct Cli {
     ignores: String,
 
     #[clap(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -71,12 +71,12 @@ fn main() -> anyhow::Result<()> {
     );
 
     match &cli.command {
-        Commands::Test {} => println!("{}", "Show current link status".green()),
-        Commands::Link {} => println!(
+        Some(Commands::Test {}) | None => println!("{}", "Show current link status".green()),
+        Some(Commands::Link {}) => println!(
             "{}",
             "Create symlink in home directory from dot config directory".green()
         ),
-        Commands::Unlink {} => println!("{}", "Remove sysmlink in home directory".green()),
+        Some(Commands::Unlink {}) => println!("{}", "Remove sysmlink in home directory".green()),
     }
 
     println!("");
