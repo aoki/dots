@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::{
-    fs::{self},
+    fs::{self, ReadDir},
     path::{Path, PathBuf},
 };
 
@@ -50,6 +50,28 @@ enum Commands {
     Unlink {},
 }
 
+fn test_symlink(paths: ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
+    for path in paths {
+        match path {
+            Err(e) => eprintln!("{:?}, {}: {}", e, "Can't access a path".red(), e),
+            Ok(p) => {
+                let mut name = PathBuf::new();
+                name.push(&home_dir_path);
+                name.push(p.file_name());
+                match fs::read_link(Path::new(&name)) {
+                    Ok(p) => println!(
+                        "{} {}",
+                        "✔︎".green().bold(),
+                        p.file_name().unwrap().to_string_lossy()
+                    ),
+                    Err(_) => println!("{} {}", "✖︎".red().bold(), p.file_name().to_string_lossy()),
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
@@ -70,15 +92,6 @@ fn main() -> anyhow::Result<()> {
         &home_dir_path.to_string_lossy().green()
     );
 
-    match &cli.command {
-        Some(Commands::Test {}) | None => println!("{}", "Show current link status".green()),
-        Some(Commands::Link {}) => println!(
-            "{}",
-            "Create symlink in home directory from dot config directory".green()
-        ),
-        Some(Commands::Unlink {}) => println!("{}", "Remove sysmlink in home directory".green()),
-    }
-
     println!("");
     println!("{}", "Dotfiles".bold());
     match fs::read_dir(&dot_dir_path) {
@@ -88,30 +101,16 @@ fn main() -> anyhow::Result<()> {
             "Can't read dotfile directory".red(),
             e
         ),
-        Ok(paths) => {
-            for path in paths {
-                match path {
-                    Err(e) => eprintln!("{:?}, {}: {}", e, "Can't access a path".red(), e),
-                    Ok(p) => {
-                        let mut name = PathBuf::new();
-                        name.push(&home_dir_path);
-                        name.push(p.file_name());
-                        match fs::read_link(Path::new(&name)) {
-                            Ok(p) => {
-                                println!(
-                                    "{} {}",
-                                    "✔︎".green().bold(),
-                                    p.file_name().unwrap().to_string_lossy()
-                                )
-                            }
-                            Err(_) => {
-                                println!("{} {}", "✖︎".red().bold(), p.file_name().to_string_lossy())
-                            }
-                        }
-                    }
-                }
+        Ok(paths) => match &cli.command {
+            Some(Commands::Test {}) | None => test_symlink(paths, &home_dir_path)?,
+            Some(Commands::Link {}) => println!(
+                "{}",
+                "Create symlink in home directory from dot config directory".green()
+            ),
+            Some(Commands::Unlink {}) => {
+                println!("{}", "Remove sysmlink in home directory".green())
             }
-        }
+        },
     }
     Ok(())
 }
