@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::{
+    any,
     fs::{self, ReadDir},
     path::{Path, PathBuf},
 };
@@ -77,7 +78,7 @@ fn main() -> anyhow::Result<()> {
 
     let dot_dir_path = cli.path;
     let home_dir_path = cli.home;
-    let ignore_file_list: Vec<&str> = cli.ignores.split(",").collect();
+    let ignore_file_list = cli.ignores.split(",").map(|e| e.to_string()).collect();
     println!("{:?}", &ignore_file_list);
 
     println!("");
@@ -103,14 +104,46 @@ fn main() -> anyhow::Result<()> {
         ),
         Ok(paths) => match &cli.command {
             Some(Commands::Test {}) | None => test_symlink(paths, &home_dir_path)?,
-            Some(Commands::Link {}) => println!(
-                "{}",
-                "Create symlink in home directory from dot config directory".green()
-            ),
+            Some(Commands::Link {}) => {
+                println!(
+                    "{}",
+                    "Create symlink in home directory from dot config directory".green()
+                );
+                create_symlink(paths, &home_dir_path, &ignore_file_list);
+            }
             Some(Commands::Unlink {}) => {
                 println!("{}", "Remove sysmlink in home directory".green())
             }
         },
     }
+    Ok(())
+}
+
+fn ignore_filter(paths: ReadDir, ignore_file_list: &Vec<String>) -> anyhow::Result<()> {
+    println!("IGNOREFILTER");
+    println!(
+        "Paths: {:?}",
+        paths
+            .filter_map(|entry| {
+                println!("{:?}", entry);
+                entry.ok().and_then(|e| {
+                    e.path()
+                        .file_name()
+                        .and_then(|n| n.to_str().map(|s| String::from(s)))
+                })
+            })
+            .collect::<Vec<String>>()
+    );
+    Ok(())
+}
+
+fn create_symlink(
+    paths: ReadDir,
+    home_dir_path: &PathBuf,
+    ignore_file_list: &Vec<String>,
+) -> anyhow::Result<()> {
+    // filter
+    home_dir_path;
+    ignore_filter(paths, &ignore_file_list);
     Ok(())
 }
