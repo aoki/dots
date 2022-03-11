@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::{
     any,
+    collections::HashSet,
     fs::{self, ReadDir},
     path::{Path, PathBuf},
 };
@@ -36,7 +37,7 @@ struct Cli {
         long,
         value_name = "IGNORE_FILE_LIST",
         env = "DOTS_IGNORE_FILES",
-        default_value = ".DS_Store,.gitignore"
+        default_value = ".DS_Store,.gitignore,.sample.yml"
     )]
     ignores: String,
 
@@ -119,21 +120,38 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn x() {
+    let list = "foo.txt,bar.txt,buz.txt";
+    let ignore = "bar.txt";
+
+    let sp = list
+        .split(",")
+        .map(|e| e.to_string())
+        .collect::<Vec<String>>();
+    println!("{:?}", sp);
+    let res = sp
+        .iter()
+        .filter(|&f| f != "foo.txt")
+        .map(|e| e.to_string())
+        .collect::<Vec<String>>();
+    println!("{:?}", res);
+}
+
 fn ignore_filter(paths: ReadDir, ignore_file_list: &Vec<String>) -> anyhow::Result<()> {
-    println!("IGNOREFILTER");
-    println!(
-        "Paths: {:?}",
-        paths
-            .filter_map(|entry| {
-                println!("{:?}", entry);
-                entry.ok().and_then(|e| {
-                    e.path()
-                        .file_name()
-                        .and_then(|n| n.to_str().map(|s| String::from(s)))
-                })
+    let p = paths
+        .filter_map(|entry| {
+            println!("{:?}", entry);
+            entry.ok().and_then(|e| {
+                e.path()
+                    .file_name()
+                    .and_then(|n| n.to_str().map(|s| String::from(s)))
             })
-            .collect::<Vec<String>>()
-    );
+        })
+        .filter(|c| ignore_file_list.iter().any(|i| i != c))
+        .collect::<Vec<String>>();
+    println!("IGNOREFILTER");
+    println!("Paths: {:?}", p);
+
     Ok(())
 }
 
@@ -146,4 +164,20 @@ fn create_symlink(
     home_dir_path;
     ignore_filter(paths, &ignore_file_list);
     Ok(())
+}
+
+fn filter_sample() {
+    let list = "foo.txt,bar.txt,buz.txt";
+    let ignore = "bar.txt,buz.txt";
+
+    let sp: Vec<String> = list.split(",").map(|e| e.to_string()).collect();
+    let ig: HashSet<String> = HashSet::from_iter(ignore.split(",").map(|e| e.to_string()));
+    println!("{:?}", sp);
+    println!("{:?}", &ig);
+    println!("{:?}", sp.contains(&"foo.txt".to_string()));
+    println!("{:?}", ig.contains(&"foo.txt".to_string()));
+    // let res = sp.iter().filter(|&f| f != "foo.txt").map(|e| e.to_string()).collect::<Vec<String>>();
+    // let res = sp.iter().filter(|&f| ig.iter().filter(|&i| i!=f)).map(|e| e.to_string()).collect::<Vec<String>>();
+    let res = sp.iter().all(|f| ig.contains(f));
+    println!("{:?}", res);
 }
