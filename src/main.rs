@@ -75,6 +75,8 @@ fn test_symlink(paths: ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
 }
 
 fn main() -> anyhow::Result<()> {
+    filter_sample();
+
     let cli = Cli::parse();
 
     let dot_dir_path = cli.path;
@@ -120,23 +122,6 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn x() {
-    let list = "foo.txt,bar.txt,buz.txt";
-    let ignore = "bar.txt";
-
-    let sp = list
-        .split(",")
-        .map(|e| e.to_string())
-        .collect::<Vec<String>>();
-    println!("{:?}", sp);
-    let res = sp
-        .iter()
-        .filter(|&f| f != "foo.txt")
-        .map(|e| e.to_string())
-        .collect::<Vec<String>>();
-    println!("{:?}", res);
-}
-
 fn ignore_filter(paths: ReadDir, ignore_file_list: &Vec<String>) -> anyhow::Result<()> {
     let p = paths
         .filter_map(|entry| {
@@ -172,12 +157,14 @@ fn filter_sample() {
 
     let sp: Vec<String> = list.split(",").map(|e| e.to_string()).collect();
     let ig: HashSet<String> = HashSet::from_iter(ignore.split(",").map(|e| e.to_string()));
+
     println!("{:?}", sp);
     println!("{:?}", &ig);
     println!("{:?}", sp.contains(&"foo.txt".to_string()));
     println!("{:?}", ig.contains(&"foo.txt".to_string()));
-    // let res = sp.iter().filter(|&f| f != "foo.txt").map(|e| e.to_string()).collect::<Vec<String>>();
-    // let res = sp.iter().filter(|&f| ig.iter().filter(|&i| i!=f)).map(|e| e.to_string()).collect::<Vec<String>>();
     let res = sp.iter().all(|f| ig.contains(f));
     println!("{:?}", res);
+
+    let filtered_list: Vec<&String> = sp.iter().filter(|&s| !ig.contains(s)).collect();
+    println!("FILTERED LIST: {:?}", filtered_list);
 }
