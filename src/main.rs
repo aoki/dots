@@ -1,7 +1,6 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use std::{
-    any,
     collections::HashSet,
     fs::{self, ReadDir},
     path::{Path, PathBuf},
@@ -74,19 +73,13 @@ fn test_symlink(paths: ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn main() -> anyhow::Result<()> {
-    filter_sample();
-
-    let cli = Cli::parse();
-
-    let dot_dir_path = cli.path;
-    let home_dir_path = cli.home;
-    let ignore_file_list = cli.ignores.split(",").map(|e| e.to_string()).collect();
-    println!("{:?}", &ignore_file_list);
-
-    println!("");
+fn display_target_info(
+    dot_dir_path: &PathBuf,
+    home_dir_path: &PathBuf,
+    ignore_file_list: &HashSet<String>,
+) -> anyhow::Result<()> {
     println!(
-        "{} {}",
+        "\n{} {}",
         "Dotfile directory:".bold(),
         &dot_dir_path.to_string_lossy().green()
     );
@@ -95,6 +88,32 @@ fn main() -> anyhow::Result<()> {
         "Target home directory:".bold(),
         &home_dir_path.to_string_lossy().green()
     );
+    println!(
+        "{} {}",
+        "Ignore files:".bold(),
+        ignore_file_list
+            .clone()
+            .into_iter()
+            .collect::<Vec<String>>()
+            .join(",")
+            .green()
+    );
+    Ok(())
+}
+
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+
+    let dot_dir_path = cli.path;
+    let home_dir_path = cli.home;
+    let ignore_file_list: HashSet<String> = cli
+        .ignores
+        .split(",")
+        .into_iter()
+        .map(|e| e.to_string())
+        .collect();
+
+    display_target_info(&dot_dir_path, &home_dir_path, &ignore_file_list)?;
 
     println!("");
     println!("{}", "Dotfiles".bold());
@@ -112,7 +131,7 @@ fn main() -> anyhow::Result<()> {
                     "{}",
                     "Create symlink in home directory from dot config directory".green()
                 );
-                create_symlink(paths, &home_dir_path, &ignore_file_list);
+                // create_symlink(paths, &home_dir_path, &ignore_file_list);
             }
             Some(Commands::Unlink {}) => {
                 println!("{}", "Remove sysmlink in home directory".green())
@@ -151,20 +170,13 @@ fn create_symlink(
     Ok(())
 }
 
-fn filter_sample() {
-    let list = "foo.txt,bar.txt,buz.txt";
-    let ignore = "bar.txt,buz.txt";
-
-    let sp: Vec<String> = list.split(",").map(|e| e.to_string()).collect();
-    let ig: HashSet<String> = HashSet::from_iter(ignore.split(",").map(|e| e.to_string()));
-
-    println!("{:?}", sp);
-    println!("{:?}", &ig);
-    println!("{:?}", sp.contains(&"foo.txt".to_string()));
-    println!("{:?}", ig.contains(&"foo.txt".to_string()));
-    let res = sp.iter().all(|f| ig.contains(f));
-    println!("{:?}", res);
-
-    let filtered_list: Vec<&String> = sp.iter().filter(|&s| !ig.contains(s)).collect();
-    println!("FILTERED LIST: {:?}", filtered_list);
+fn file_filter(
+    target_list: Vec<String>,
+    ignore_list: HashSet<String>,
+) -> anyhow::Result<Vec<String>> {
+    Ok(target_list
+        .iter()
+        .filter(|&f| !ignore_list.contains(f))
+        .map(|f| f.clone())
+        .collect())
 }
