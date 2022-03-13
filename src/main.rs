@@ -1,8 +1,14 @@
+use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use skim::{
+    prelude::{SkimItemReader, SkimOptionsBuilder},
+    Skim, SkimItem,
+};
 use std::{
     collections::HashSet,
     fs::{self, ReadDir},
+    io::Cursor,
     path::{Path, PathBuf},
 };
 
@@ -49,6 +55,24 @@ enum Commands {
     Test {},
     Link {},
     Unlink {},
+}
+
+fn finder(file_list: &Vec<String>) -> anyhow::Result<Vec<String>> {
+    let skim_options = SkimOptionsBuilder::default()
+        .height(Some("50%"))
+        .multi(true)
+        .build()
+        .map_err(|e| anyhow!(e))?;
+
+    let item_reader = SkimItemReader::default().of_bufread(Cursor::new(file_list.join("\n")));
+    let selected_items = Skim::run_with(&skim_options, Some(item_reader))
+        .map(|out| out.selected_items)
+        .unwrap_or_else(|| Vec::new());
+
+    for item in selected_items.iter() {
+        println!("Selected item: {}", item.output());
+    }
+    Ok((vec![]))
 }
 
 fn test_symlink(paths: ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
@@ -131,7 +155,9 @@ fn main() -> anyhow::Result<()> {
                     "{}",
                     "Create symlink in home directory from dot config directory".green()
                 );
-                // create_symlink(paths, &home_dir_path, &ignore_file_list);
+                let res = create_symlink(paths, &home_dir_path, &ignore_file_list)?;
+                let r = finder(&res)?;
+                println!("{:?}", res);
             }
             Some(Commands::Unlink {}) => {
                 println!("{}", "Remove sysmlink in home directory".green())
@@ -141,38 +167,25 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn ignore_filter(paths: ReadDir, ignore_file_list: &Vec<String>) -> anyhow::Result<()> {
-    let p = paths
-        .filter_map(|entry| {
-            println!("{:?}", entry);
-            entry.ok().and_then(|e| {
-                e.path()
-                    .file_name()
-                    .and_then(|n| n.to_str().map(|s| String::from(s)))
-            })
-        })
-        .filter(|c| ignore_file_list.iter().any(|i| i != c))
-        .collect::<Vec<String>>();
-    println!("IGNOREFILTER");
-    println!("Paths: {:?}", p);
-
-    Ok(())
-}
-
 fn create_symlink(
     paths: ReadDir,
     home_dir_path: &PathBuf,
-    ignore_file_list: &Vec<String>,
-) -> anyhow::Result<()> {
-    // filter
-    home_dir_path;
-    ignore_filter(paths, &ignore_file_list);
-    Ok(())
+    ignore_file_list: &HashSet<String>,
+) -> anyhow::Result<Vec<String>> {
+    let file_list: Vec<String> = paths
+        .filter(|path| path.is_ok())
+        .map(|path| path.unwrap())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+
+    let filtered_list = file_filter(&file_list, ignore_file_list)?;
+
+    Ok(filtered_list)
 }
 
 fn file_filter(
-    target_list: Vec<String>,
-    ignore_list: HashSet<String>,
+    target_list: &Vec<String>,
+    ignore_list: &HashSet<String>,
 ) -> anyhow::Result<Vec<String>> {
     Ok(target_list
         .iter()
