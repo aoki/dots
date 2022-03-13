@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use skim::{
     prelude::{SkimItemReader, SkimOptionsBuilder},
-    Skim, SkimItem,
+    Skim,
 };
 use std::{
     collections::HashSet,
@@ -69,10 +69,10 @@ fn finder(file_list: &Vec<String>) -> anyhow::Result<Vec<String>> {
         .map(|out| out.selected_items)
         .unwrap_or_else(|| Vec::new());
 
-    for item in selected_items.iter() {
-        println!("Selected item: {}", item.output());
-    }
-    Ok((vec![]))
+    Ok(selected_items
+        .iter()
+        .map(|i| i.output().to_string())
+        .collect::<Vec<String>>())
 }
 
 fn test_symlink(paths: ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
@@ -155,9 +155,15 @@ fn main() -> anyhow::Result<()> {
                     "{}",
                     "Create symlink in home directory from dot config directory".green()
                 );
-                let res = create_symlink(paths, &home_dir_path, &ignore_file_list)?;
-                let r = finder(&res)?;
-                println!("{:?}", res);
+                let target_list: Vec<String> = paths
+                    .filter(|path| path.is_ok())
+                    .map(|path| path.unwrap())
+                    .map(|e| e.file_name().to_string_lossy().to_string())
+                    .collect();
+                let filtered_files = file_filter(&target_list, &ignore_file_list)?;
+                let selected_items = finder(&filtered_files)?;
+                println!("SELCTED > {:?}", selected_items);
+                let res = create_symlink(selected_items, &home_dir_path)?;
             }
             Some(Commands::Unlink {}) => {
                 println!("{}", "Remove sysmlink in home directory".green())
@@ -168,19 +174,10 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn create_symlink(
-    paths: ReadDir,
+    target_list: Vec<String>,
     home_dir_path: &PathBuf,
-    ignore_file_list: &HashSet<String>,
 ) -> anyhow::Result<Vec<String>> {
-    let file_list: Vec<String> = paths
-        .filter(|path| path.is_ok())
-        .map(|path| path.unwrap())
-        .map(|e| e.file_name().to_string_lossy().to_string())
-        .collect();
-
-    let filtered_list = file_filter(&file_list, ignore_file_list)?;
-
-    Ok(filtered_list)
+    unimplemented!("Todo");
 }
 
 fn file_filter(
