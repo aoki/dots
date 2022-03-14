@@ -5,6 +5,7 @@ use skim::{
     prelude::{SkimItemReader, SkimOptionsBuilder},
     Skim,
 };
+use std::os::unix::fs as unix_fs;
 use std::{
     collections::HashSet,
     fs::{self, ReadDir},
@@ -163,7 +164,11 @@ fn main() -> anyhow::Result<()> {
                 let filtered_files = file_filter(&target_list, &ignore_file_list)?;
                 let selected_items = finder(&filtered_files)?;
                 println!("SELCTED > {:?}", selected_items);
-                let res = create_symlink(selected_items, &home_dir_path)?;
+                create_symlink(
+                    selected_items,
+                    &home_dir_path.to_string_lossy().to_string(),
+                    &dot_dir_path.to_string_lossy().to_string(),
+                )?;
             }
             Some(Commands::Unlink {}) => {
                 println!("{}", "Remove sysmlink in home directory".green())
@@ -175,9 +180,18 @@ fn main() -> anyhow::Result<()> {
 
 fn create_symlink(
     target_list: Vec<String>,
-    home_dir_path: &PathBuf,
-) -> anyhow::Result<Vec<String>> {
-    unimplemented!("Todo");
+    home_dir_path: &String,
+    dot_dir_path: &String,
+) -> anyhow::Result<Vec<()>> {
+    target_list
+        .iter()
+        .map(|file| {
+            let from: PathBuf = [home_dir_path, &file].iter().collect();
+            let to: PathBuf = [dot_dir_path, &file].iter().collect();
+            println!("{} -> {}", &from.to_string_lossy(), &to.to_string_lossy());
+            unix_fs::symlink(&to, &from).map_err(|e| anyhow!(e))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()
 }
 
 fn file_filter(
