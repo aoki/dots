@@ -5,13 +5,13 @@ use skim::{
     prelude::{SkimItemReader, SkimOptionsBuilder},
     Skim,
 };
-use std::os::unix::fs as unix_fs;
 use std::{
     collections::HashSet,
     fs::{self, ReadDir},
     io::Cursor,
     path::{Path, PathBuf},
 };
+use std::{fs::remove_file, os::unix::fs as unix_fs};
 
 #[derive(Parser)]
 #[clap(version, about)]
@@ -172,6 +172,13 @@ fn main() -> anyhow::Result<()> {
             }
             Some(Commands::Unlink {}) => {
                 println!("{}", "Remove sysmlink in home directory".green())
+                let target_list: Vec<String> = paths
+                    .filter(|path| path.is_ok())
+                    .map(|path| path.unwrap())
+                    .map(|e| e.file_name().to_string_lossy().to_string())
+                    .collect();
+                // check symlinks
+                // remove_symlink(target)
             }
         },
     }
@@ -190,6 +197,21 @@ fn create_symlink(
             let to: PathBuf = [dot_dir_path, &file].iter().collect();
             println!("{} -> {}", &from.to_string_lossy(), &to.to_string_lossy());
             unix_fs::symlink(&to, &from).map_err(|e| anyhow!(e))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()
+}
+
+fn remove_symlink(target_list: Vec<String>, home_dir_path: &String) -> anyhow::Result<Vec<()>> {
+    target_list
+        .iter()
+        .map(|file| {
+            let link: PathBuf = [home_dir_path, &file].iter().collect();
+            fs::read_link(&link)
+                .map(|path| {
+                    println!("Remove a link: {:?}", &path);
+                    remove_file(&path).unwrap() // TODO: unwrap
+                })
+                .map_err(|e| anyhow!(e))
         })
         .collect::<anyhow::Result<Vec<_>>>()
 }
