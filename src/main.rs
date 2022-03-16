@@ -171,14 +171,14 @@ fn main() -> anyhow::Result<()> {
                 )?;
             }
             Some(Commands::Unlink {}) => {
-                println!("{}", "Remove sysmlink in home directory".green())
+                println!("{}", "Remove sysmlink in home directory".green());
                 let target_list: Vec<String> = paths
                     .filter(|path| path.is_ok())
                     .map(|path| path.unwrap())
                     .map(|e| e.file_name().to_string_lossy().to_string())
                     .collect();
-                // check symlinks
-                // remove_symlink(target)
+
+                remove_symlink(target_list, &home_dir_path);
             }
         },
     }
@@ -201,19 +201,13 @@ fn create_symlink(
         .collect::<anyhow::Result<Vec<_>>>()
 }
 
-fn remove_symlink(target_list: Vec<String>, home_dir_path: &String) -> anyhow::Result<Vec<()>> {
+fn remove_symlink(target_list: Vec<String>, home_dir_path: &PathBuf) -> Vec<anyhow::Result<()>> {
+    //TODO: home_dir_path
     target_list
         .iter()
-        .map(|file| {
-            let link: PathBuf = [home_dir_path, &file].iter().collect();
-            fs::read_link(&link)
-                .map(|path| {
-                    println!("Remove a link: {:?}", &path);
-                    remove_file(&path).unwrap() // TODO: unwrap
-                })
-                .map_err(|e| anyhow!(e))
-        })
-        .collect::<anyhow::Result<Vec<_>>>()
+        .map(|p| fs::read_link(&p))
+        .map(|x| x.and_then(|z| remove_file(z)).map_err(|e| anyhow!(e)))
+        .collect::<Vec<_>>()
 }
 
 fn file_filter(
