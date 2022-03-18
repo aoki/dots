@@ -193,8 +193,11 @@ fn create_symlink(
     target_list
         .iter()
         .map(|file| {
-            let from: PathBuf = [home_dir_path, &file].iter().collect();
-            let to: PathBuf = [dot_dir_path, &file].iter().collect();
+            println!("{:?}/{:?} -> {:?}", &home_dir_path, &file, &dot_dir_path);
+            let from: PathBuf =
+                fs::canonicalize::<PathBuf>([".", home_dir_path, &file].iter().collect())?;
+            let to: PathBuf =
+                fs::canonicalize::<PathBuf>([".", dot_dir_path, &file].iter().collect())?;
             println!("{} -> {}", &from.to_string_lossy(), &to.to_string_lossy());
             unix_fs::symlink(&to, &from).map_err(|e| anyhow!(e))
         })
@@ -205,11 +208,18 @@ fn remove_symlink(target_list: Vec<String>, home_dir_path: &PathBuf) -> Vec<anyh
     //TODO: home_dir_path
     target_list
         .iter()
-        .map(|p| fs::read_link(&p))
-        .map(|x| x.and_then(|z| remove_file(z)).map_err(|e| anyhow!(e)))
+        .map(|file| {
+            let path: PathBuf =
+                fs::canonicalize::<PathBuf>([home_dir_path, Path::new(file)].iter().collect())?;
+            fs::read_link(&path)
+                .map(|_| {
+                    println!("Remove: {:?}", path);
+                    remove_file(path).map_err(|e| anyhow!(e)).unwrap()
+                })
+                .map_err(|e| anyhow!(e))
+        })
         .collect::<Vec<_>>()
 }
-
 fn file_filter(
     target_list: &Vec<String>,
     ignore_list: &HashSet<String>,
