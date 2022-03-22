@@ -76,4 +76,18 @@ mod test {
         };
         assert_eq!(actual, expect);
     }
+
+    #[test]
+    fn new_valid_link() {
+        let from = PathBuf::from_str("~").ok();
+        let to = PathBuf::from_str("./src").ok();
+        println!(">>>>> {:?}, {:?}", from, to);
+        let actual = Dotfile::new(from, to);
+        let expect = Dotfile {
+            from: PathBuf::from_str("/Users/aoki").ok(), // TODO: Change the test path
+            to: PathBuf::from_str("/Users/aoki/work/src/github.com/aoki/dots/src").ok(),
+            state: State::Other,
+        };
+        assert_eq!(actual, expect);
+    }
 }
