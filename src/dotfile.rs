@@ -50,7 +50,7 @@ impl Dotfile {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::str::FromStr;
+    use std::{env::VarError, str::FromStr};
 
     #[test]
     fn new_none() {
@@ -78,16 +78,19 @@ mod test {
     }
 
     #[test]
-    fn new_valid_link() {
+    fn new_valid_link() -> Result<(), VarError> {
         let from = PathBuf::from_str("~").ok();
         let to = PathBuf::from_str("./src").ok();
         println!(">>>>> {:?}, {:?}", from, to);
+        let home = std::env::var("HOME")?;
         let actual = Dotfile::new(from, to);
         let expect = Dotfile {
-            from: PathBuf::from_str("/Users/aoki").ok(), // TODO: Change the test path
-            to: PathBuf::from_str("/Users/aoki/work/src/github.com/aoki/dots/src").ok(),
+            from: PathBuf::from_str(&home).ok(),
+            to: PathBuf::from_str(format!("{}/work/src/github.com/aoki/dots/src", home).as_ref())
+                .ok(),
             state: State::Other,
         };
         assert_eq!(actual, expect);
+        Ok(())
     }
 }
