@@ -1,17 +1,25 @@
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use dots::dotfile::Dotfile;
 use skim::{
     prelude::{SkimItemReader, SkimOptionsBuilder},
     Skim,
 };
 use std::{
     collections::HashSet,
-    fs::{self, ReadDir},
+    fs,
     io::Cursor,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use std::{fs::remove_file, os::unix::fs as unix_fs};
+
+fn canonicalize(path: &PathBuf) -> anyhow::Result<PathBuf> {
+    let s = path.to_string_lossy();
+    let tilde = PathBuf::from_str(&shellexpand::tilde(&s))?;
+    fs::canonicalize::<PathBuf>(tilde).map_err(|e| anyhow!(e))
+}
 
 #[derive(Parser)]
 #[clap(version, about)]
@@ -23,7 +31,7 @@ struct Cli {
         value_name = "CONFIG_DIRECTORY",
         env = "DOTS_CONFIG_DIR",
         // default_value = "."
-        default_value = "test-conf.d"
+        default_value = "test-resources/test-conf.d"
     )]
     path: PathBuf,
 
@@ -34,7 +42,7 @@ struct Cli {
         value_name = "HOME_DIRECTORY",
         env = "DOTS_HOME_DIR",
         // default_value = "`",
-        default_value = "test-home"
+        default_value = "test-resources/test-home"
     )]
     home: PathBuf,
 
@@ -76,20 +84,24 @@ fn finder(file_list: &Vec<String>) -> anyhow::Result<Vec<String>> {
         .collect::<Vec<String>>())
 }
 
-fn test_symlink(paths: ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
+fn test_symlink(paths: fs::ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
     for path in paths {
         match path {
             Err(e) => eprintln!("{:?}, {}: {}", e, "Can't access a path".red(), e),
             Ok(p) => {
-                let mut name = PathBuf::new();
-                name.push(&home_dir_path);
-                name.push(p.file_name());
-                match fs::read_link(Path::new(&name)) {
-                    Ok(p) => println!(
-                        "{} {}",
-                        "✔︎".green().bold(),
-                        p.file_name().unwrap().to_string_lossy()
-                    ),
+                let mut from = PathBuf::new();
+                from.push(&home_dir_path);
+                from.push(p.file_name());
+                match fs::read_link(Path::new(&from)) {
+                    Ok(to) => {
+                        let dot = Dotfile::new(Some(from), Some(to.clone()));
+                        println!(">>> {:?}", dot);
+                        println!(
+                            "{} {}",
+                            "✔︎".green().bold(),
+                            to.file_name().unwrap().to_string_lossy()
+                        )
+                    }
                     Err(_) => println!("{} {}", "✖︎".red().bold(), p.file_name().to_string_lossy()),
                 }
             }
@@ -129,8 +141,9 @@ fn display_target_info(
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let dot_dir_path = cli.path;
-    let home_dir_path = cli.home;
+    let dot_dir_path = canonicalize(&cli.path)?;
+    let home_dir_path = canonicalize(&cli.home)?;
+
     let ignore_file_list: HashSet<String> = cli
         .ignores
         .split(",")
@@ -177,8 +190,11 @@ fn main() -> anyhow::Result<()> {
                     .map(|path| path.unwrap())
                     .map(|e| e.file_name().to_string_lossy().to_string())
                     .collect();
+                let filtered_files = file_filter(&target_list, &ignore_file_list)?;
+                let selected_items = finder(&filtered_files)?;
+                println!("SELCTED > {:?}", selected_items);
 
-                remove_symlink(target_list, &home_dir_path);
+                remove_symlink(selected_items, &home_dir_path);
             }
         },
     }
@@ -202,11 +218,20 @@ fn create_symlink(
 }
 
 fn remove_symlink(target_list: Vec<String>, home_dir_path: &PathBuf) -> Vec<anyhow::Result<()>> {
-    //TODO: home_dir_path
-    target_list
+    println!("LIST: {:?}", target_list);
+    let rl = target_list
         .iter()
-        .map(|p| fs::read_link(&p))
-        .map(|x| x.and_then(|z| remove_file(z)).map_err(|e| anyhow!(e)))
+        .map(|p| {
+            let mut x = PathBuf::new();
+            x.push(home_dir_path);
+            x.push(p);
+            fs::read_link(&x).map(|_| x)
+        })
+        .filter(|p| p.is_ok())
+        .map(|p| p.unwrap())
+        .collect::<Vec<_>>();
+    rl.iter()
+        .map(|f| remove_file(f).map_err(|e| anyhow!(e)))
         .collect::<Vec<_>>()
 }
 

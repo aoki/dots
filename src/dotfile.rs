@@ -1,10 +1,5 @@
 use anyhow::anyhow;
-use std::os::unix::fs as unix_fs;
-use std::{
-    fs::{self, read_link},
-    path::PathBuf,
-    str::FromStr,
-};
+use std::{fs::read_link, path::PathBuf, str::FromStr};
 
 // #![warn(missing_docs)]
 
@@ -35,22 +30,26 @@ pub struct Dotfile {
 }
 
 fn parse_tilde_and_dot(path: &PathBuf) -> anyhow::Result<PathBuf> {
-    let tilde = PathBuf::from_str(shellexpand::tilde(path.to_string_lossy().as_ref()).as_ref())?;
-    fs::canonicalize::<PathBuf>(tilde).map_err(|e| anyhow!(e))
+    let s = path.to_string_lossy();
+    PathBuf::from_str(&shellexpand::tilde(&s)).map_err(|e| anyhow!(e))
+    // let dot = fs::canonicalize::<PathBuf>(tilde).map_err(|e| anyhow!(e));
 }
 
 impl Dotfile {
     pub fn new(from: Option<PathBuf>, to: Option<PathBuf>) -> Self {
+        println!("{:?} >>>> {:?}", from, to);
         let parsed_from = from.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
         let parsed_to = to.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
+        println!("{:?} >>>> {:?}", parsed_from, parsed_to);
 
         let status = match &parsed_from {
             Some(from) => {
-                match parsed_to {
+                match &parsed_to {
                     Some(_) => match read_link(from) {
                         Ok(_) => State::Linked,
-                        Err(_) => {
+                        Err(e) => {
                             // link error
+                            eprintln!("LinkERR: {:?}, {:?}", from, e);
                             State::Other
                         }
                     },
@@ -74,49 +73,52 @@ impl Dotfile {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::{env::VarError, os::unix::fs::symlink, str::FromStr};
+    use crate::dotfile;
+    use std::{os::unix::fs::symlink, str::FromStr};
+
+    // #[test]
+    // fn resolve_path_wtih_dot_and_tilde() {
+    //     // unimplemented!()
+    // }
+    // #[test]
+    // fn new_none() {
+    //     let actual = Dotfile::new(None, None);
+    //     let expect = Dotfile {
+    //         from: None,
+    //         to: None,
+    //         state: State::Unliked,
+    //     };
+    //     assert_eq!(actual, expect);
+    // }
+
+    // #[test]
+    // fn new_invalid_link() {
+    //     let from = PathBuf::from_str("../invalid/link").ok();
+    //     let to = PathBuf::from_str("../invalid/link").ok();
+
+    //     let actual = Dotfile::new(from, to);
+    //     let expect = Dotfile {
+    //         from: None,
+    //         to: None,
+    //         state: State::Unliked,
+    //     };
+    //     assert_eq!(actual, expect);
+    // }
 
     #[test]
-    fn new_none() {
-        let actual = Dotfile::new(None, None);
+    fn new_valid_link() {
+        let dotfile_name = ".samplerc";
+        let from = PathBuf::from(format!("./test-resources/test-home/{}", dotfile_name));
+        let to = PathBuf::from(format!("./test-resources/test-conf.d/{}", dotfile_name));
+
+        symlink(&to, &from).ok();
+
+        let actual = Dotfile::new(Some(from.clone()), Some(to.clone()));
         let expect = Dotfile {
-            from: None,
-            to: None,
-            state: State::Unliked,
-        };
-        assert_eq!(actual, expect);
-    }
-
-    #[test]
-    fn new_invalid_link() {
-        let from = PathBuf::from_str("../foo/bar").ok();
-        let to = PathBuf::from_str("../buz/qux").ok();
-        println!(">>>>> {:?}, {:?}", from, to);
-
-        let actual = Dotfile::new(from, to);
-        let expect = Dotfile {
-            from: None,
-            to: None,
-            state: State::Unliked,
-        };
-        assert_eq!(actual, expect);
-    }
-
-    #[test]
-    fn new_valid_link() -> Result<(), VarError> {
-        let from = PathBuf::from_str("./dot-test").ok();
-        let to = PathBuf::from_str("./src").ok();
-        println!(">>>>> {:?}, {:?}", from, to);
-
-        let home = std::env::var("HOME")?;
-        let actual = Dotfile::new(from, to);
-        let expect = Dotfile {
-            from: PathBuf::from_str(&home).ok(),
-            to: PathBuf::from_str(format!("{}/work/src/github.com/aoki/dots/src", home).as_ref())
-                .ok(),
+            from: Some(from),
+            to: Some(to),
             state: State::Linked,
         };
         assert_eq!(actual, expect);
-        Ok(())
     }
 }
