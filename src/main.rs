@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use dots::dotfile::Dotfile;
+use dots::dotfile::{Dotfile, State};
 use skim::{
     prelude::{SkimItemReader, SkimOptionsBuilder},
     Skim,
@@ -10,7 +10,7 @@ use std::{
     collections::HashSet,
     fs,
     io::Cursor,
-    path::{Path, PathBuf},
+    path::{self, Path, PathBuf},
     str::FromStr,
 };
 use std::{fs::remove_file, os::unix::fs as unix_fs};
@@ -84,6 +84,25 @@ fn finder(file_list: &Vec<String>) -> anyhow::Result<Vec<String>> {
         .collect::<Vec<String>>())
 }
 
+fn check_status(
+    home_dir_path: &PathBuf,
+    dot_dir_path: &PathBuf,
+    ignore_file_list: &HashSet<String>,
+) -> anyhow::Result<Vec<Dotfile>> {
+    let paths = fs::read_dir(&dot_dir_path)?;
+
+    Ok(paths
+        .map(|dir_entry| match dir_entry {
+            Ok(path) => {
+                let from = PathBuf::from(home_dir_path).join(path.file_name());
+                let to = PathBuf::from(dot_dir_path).join(path.file_name());
+                Dotfile::new(Some(from), Some(to))
+            }
+            Err(_) => Dotfile::new(None, None),
+        })
+        .collect::<Vec<_>>())
+}
+
 fn test_symlink(paths: fs::ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
     for path in paths {
         match path {
@@ -152,6 +171,8 @@ fn main() -> anyhow::Result<()> {
         .collect();
 
     display_target_info(&dot_dir_path, &home_dir_path, &ignore_file_list)?;
+
+    check_status(&home_dir_path, &dot_dir_path, &ignore_file_list);
 
     println!("");
     println!("{}", "Dotfiles".bold());
