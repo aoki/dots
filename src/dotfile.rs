@@ -37,10 +37,8 @@ fn parse_tilde_and_dot(path: &PathBuf) -> anyhow::Result<PathBuf> {
 
 impl Dotfile {
     pub fn new(from: Option<PathBuf>, to: Option<PathBuf>) -> Self {
-        println!("{:?} >>>> {:?}", from, to);
         let parsed_from = from.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
         let parsed_to = to.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
-        println!("{:?} >>>> {:?}", parsed_from, parsed_to);
 
         let status = match &parsed_from {
             Some(from) => {

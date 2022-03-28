@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use dots::dotfile::{Dotfile, State};
 use skim::{
     prelude::{SkimItemReader, SkimOptionsBuilder},
     Skim,
@@ -10,7 +9,7 @@ use std::{
     collections::HashSet,
     fs,
     io::Cursor,
-    path::{self, Path, PathBuf},
+    path::{Path, PathBuf},
     str::FromStr,
 };
 use std::{fs::remove_file, os::unix::fs as unix_fs};
@@ -84,23 +83,17 @@ fn finder(file_list: &Vec<String>) -> anyhow::Result<Vec<String>> {
         .collect::<Vec<String>>())
 }
 
-fn check_status(
-    home_dir_path: &PathBuf,
-    dot_dir_path: &PathBuf,
+fn filter(
+    paths: fs::ReadDir,
     ignore_file_list: &HashSet<String>,
-) -> anyhow::Result<Vec<Dotfile>> {
-    let paths = fs::read_dir(&dot_dir_path)?;
-
-    Ok(paths
-        .map(|dir_entry| match dir_entry {
-            Ok(path) => {
-                let from = PathBuf::from(home_dir_path).join(path.file_name());
-                let to = PathBuf::from(dot_dir_path).join(path.file_name());
-                Dotfile::new(Some(from), Some(to))
-            }
-            Err(_) => Dotfile::new(None, None),
-        })
-        .collect::<Vec<_>>())
+) -> Result<Vec<String>, anyhow::Error> {
+    let target_list: Vec<String> = paths
+        .filter(|path| path.is_ok())
+        .map(|path| path.unwrap())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    let filtered_files = file_filter(&target_list, &ignore_file_list)?;
+    finder(&filtered_files)
 }
 
 fn test_symlink(paths: fs::ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
@@ -113,8 +106,6 @@ fn test_symlink(paths: fs::ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<(
                 from.push(p.file_name());
                 match fs::read_link(Path::new(&from)) {
                     Ok(to) => {
-                        let dot = Dotfile::new(Some(from), Some(to.clone()));
-                        println!(">>> {:?}", dot);
                         println!(
                             "{} {}",
                             "✔︎".green().bold(),
@@ -172,8 +163,6 @@ fn main() -> anyhow::Result<()> {
 
     display_target_info(&dot_dir_path, &home_dir_path, &ignore_file_list)?;
 
-    check_status(&home_dir_path, &dot_dir_path, &ignore_file_list);
-
     println!("");
     println!("{}", "Dotfiles".bold());
     match fs::read_dir(&dot_dir_path) {
@@ -190,14 +179,8 @@ fn main() -> anyhow::Result<()> {
                     "{}",
                     "Create symlink in home directory from dot config directory".green()
                 );
-                let target_list: Vec<String> = paths
-                    .filter(|path| path.is_ok())
-                    .map(|path| path.unwrap())
-                    .map(|e| e.file_name().to_string_lossy().to_string())
-                    .collect();
-                let filtered_files = file_filter(&target_list, &ignore_file_list)?;
-                let selected_items = finder(&filtered_files)?;
-                println!("SELCTED > {:?}", selected_items);
+                let selected_items = filter(paths, &ignore_file_list)?;
+                println!("SELCTED > {:?}", &selected_items);
                 create_symlink(
                     selected_items,
                     &home_dir_path.to_string_lossy().to_string(),
@@ -206,15 +189,8 @@ fn main() -> anyhow::Result<()> {
             }
             Some(Commands::Unlink {}) => {
                 println!("{}", "Remove sysmlink in home directory".green());
-                let target_list: Vec<String> = paths
-                    .filter(|path| path.is_ok())
-                    .map(|path| path.unwrap())
-                    .map(|e| e.file_name().to_string_lossy().to_string())
-                    .collect();
-                let filtered_files = file_filter(&target_list, &ignore_file_list)?;
-                let selected_items = finder(&filtered_files)?;
+                let selected_items = filter(paths, &ignore_file_list)?;
                 println!("SELCTED > {:?}", selected_items);
-
                 remove_symlink(selected_items, &home_dir_path);
             }
         },
