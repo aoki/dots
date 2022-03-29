@@ -12,6 +12,12 @@ pub enum State {
     /// リンクされていない状態です
     Unliked,
 
+    /// 無視されたファイルです
+    Ignored,
+
+    /// エラー
+    Error,
+
     /// それ以外の状態です（例: 読み取り不可など）
     Other,
 }
@@ -36,27 +42,31 @@ fn parse_tilde_and_dot(path: &PathBuf) -> anyhow::Result<PathBuf> {
 }
 
 impl Dotfile {
-    pub fn new(from: Option<PathBuf>, to: Option<PathBuf>) -> Self {
+    pub fn new(from: Option<PathBuf>, to: Option<PathBuf>, state: Option<State>) -> Self {
         let parsed_from = from.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
         let parsed_to = to.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
 
-        let status = match &parsed_from {
-            Some(from) => {
-                match &parsed_to {
-                    Some(_) => match read_link(from) {
-                        Ok(_) => State::Linked,
-                        Err(e) => {
-                            // link error
-                            eprintln!("LinkERR: {:?}, {:?}", from, e);
-                            State::Other
-                        }
-                    },
-                    None => State::Unliked,
+        let status = if state == Some(State::Ignored) {
+            State::Ignored
+        } else {
+            match &parsed_from {
+                Some(from) => {
+                    match &parsed_to {
+                        Some(_) => match read_link(from) {
+                            Ok(_) => State::Linked,
+                            Err(e) => {
+                                // link error
+                                eprintln!("LinkERR: {:?}, {:?}", from, e);
+                                State::Other
+                            }
+                        },
+                        None => State::Unliked,
+                    }
                 }
-            }
-            None => {
-                println!("from parsed failed");
-                State::Unliked
+                None => {
+                    println!("from parsed failed");
+                    State::Unliked
+                }
             }
         };
 

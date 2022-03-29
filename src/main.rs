@@ -163,8 +163,10 @@ fn main() -> anyhow::Result<()> {
 
     display_target_info(&dot_dir_path, &home_dir_path, &ignore_file_list)?;
 
-    println!("");
-    println!("{}", "Dotfiles".bold());
+    println!("\n{}", "Dotfiles".bold());
+
+    // TODO: create Vec<Dotfiles>
+
     match fs::read_dir(&dot_dir_path) {
         Err(e) => eprintln!(
             "'{}' {}: {}",
