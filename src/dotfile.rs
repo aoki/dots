@@ -42,11 +42,11 @@ fn parse_tilde_and_dot(path: &PathBuf) -> anyhow::Result<PathBuf> {
 }
 
 impl Dotfile {
-    pub fn new(from: Option<PathBuf>, to: Option<PathBuf>, state: Option<State>) -> Self {
+    pub fn new(from: Option<PathBuf>, to: Option<PathBuf>, is_ignore: bool) -> Self {
         let parsed_from = from.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
         let parsed_to = to.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
 
-        let status = if state == Some(State::Ignored) {
+        let status = if is_ignore == true {
             State::Ignored
         } else {
             match &parsed_from {
@@ -63,10 +63,7 @@ impl Dotfile {
                         None => State::Unliked,
                     }
                 }
-                None => {
-                    println!("from parsed failed");
-                    State::Unliked
-                }
+                None => State::Unliked,
             }
         };
 

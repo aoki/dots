@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use dots::dotfile::Dotfile;
 use skim::{
     prelude::{SkimItemReader, SkimOptionsBuilder},
     Skim,
@@ -165,7 +166,19 @@ fn main() -> anyhow::Result<()> {
 
     println!("\n{}", "Dotfiles".bold());
 
-    // TODO: create Vec<Dotfiles>
+    let paths = fs::read_dir(&dot_dir_path)?;
+    let dotfiles: Vec<Dotfile> = paths
+        .map(|path| match path {
+            Ok(entry) => {
+                let dotfile_name = PathBuf::from(entry.file_name().to_string_lossy().to_string());
+                let file_path = [&dot_dir_path, &dotfile_name].iter().collect();
+                Dotfile::new(None, Some(file_path), false)
+            }
+            Err(_) => Dotfile::new(None, None, false),
+        })
+        .collect();
+
+    println!("{:?}", dotfiles);
 
     match fs::read_dir(&dot_dir_path) {
         Err(e) => eprintln!(
