@@ -1,13 +1,13 @@
 use anyhow::anyhow;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use dots::dotfile::{Dot, DotState};
 use skim::{
     prelude::{SkimItemReader, SkimOptionsBuilder},
     Skim,
 };
 use std::{
     collections::HashSet,
-    fmt::Display,
     fs::{self, read_link},
     io::Cursor,
     path::PathBuf,
@@ -30,8 +30,8 @@ struct Cli {
         parse(from_os_str),
         value_name = "CONFIG_DIRECTORY",
         env = "DOTS_CONFIG_DIR",
-        // default_value = "."
-        default_value = "test-resources/test-conf.d"
+        default_value = "."
+        // default_value = "test-resources/test-conf.d"
     )]
     path: PathBuf,
 
@@ -41,8 +41,8 @@ struct Cli {
         parse(from_os_str),
         value_name = "HOME_DIRECTORY",
         env = "DOTS_HOME_DIR",
-        // default_value = "~",
-        default_value = "test-resources/test-home"
+        default_value = "~",
+        // default_value = "test-resources/test-home"
     )]
     home: PathBuf,
 
@@ -51,7 +51,7 @@ struct Cli {
         long,
         value_name = "IGNORE_FILE_LIST",
         env = "DOTS_IGNORE_FILES",
-        default_value = ".DS_Store,.gitignore,.sample.yml"
+        default_value = ".DS_Store"
     )]
     ignores: String,
 
@@ -94,51 +94,6 @@ fn finder(file_list: Vec<Dot>) -> anyhow::Result<Vec<Dot>> {
         .collect::<Vec<Dot>>())
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-enum DotState {
-    Linked,
-    Unlinked,
-    Ignored,
-    LinkedToOtherDirctory,
-
-    Error,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-struct Dot {
-    from: Option<PathBuf>,
-    to: Option<PathBuf>,
-    file: Option<String>,
-    state: DotState,
-    // e: Option<Error>,
-}
-
-impl Dot {
-    fn file_name(&self) -> String {
-        self.file.clone().unwrap_or("".to_string())
-    }
-    fn from(&self) -> anyhow::Result<PathBuf> {
-        let file = match self.file.clone() {
-            Some(f) => Ok(f),
-            None => Err(anyhow!("file not found")),
-        }?;
-        match self.from.clone() {
-            Some(from) => Ok(from.join(file)),
-            None => Err(anyhow!("path not found")),
-        }
-    }
-    fn to(&self) -> anyhow::Result<PathBuf> {
-        let file = match self.file.clone() {
-            Some(f) => Ok(f),
-            None => Err(anyhow!("file not found")),
-        }?;
-        match self.to.clone() {
-            Some(to) => Ok(to.join(file)),
-            None => Err(anyhow!("path not found")),
-        }
-    }
-}
-
 fn display_target_info(
     dot_dir_path: &PathBuf,
     home_dir_path: &PathBuf,
@@ -159,23 +114,6 @@ fn display_target_info(
         "         Ignore files:".bold(),
         ignore_file_list.green()
     );
-}
-
-impl Display for Dot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let file = self.file.as_ref().unwrap_or(&"".to_string()).clone();
-        let icon = match self.state {
-            DotState::Linked => ("✔︎".green().bold(), file.white()),
-            DotState::Unlinked => ("✖︎".red().bold(), file.white()),
-            DotState::Ignored => ("-".black().bold(), format!("{}: ignored", file).black()),
-            DotState::LinkedToOtherDirctory => (
-                "-".black().bold(),
-                format!("{}: already linked to other file", file).black(),
-            ),
-            DotState::Error => ("-".black().bold(), file.red()),
-        };
-        write!(f, "{} {}", icon.0, icon.1)
-    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -221,20 +159,14 @@ fn main() -> anyhow::Result<()> {
                         Err(_) => DotState::Unlinked,
                     }
                 };
-
-                Dot {
-                    from: Some(home_dir_path.clone()),
-                    to: Some(dot_dir_path.clone()),
-                    file: Some(entry.file_name().to_string_lossy().to_string()),
-                    state: state,
-                }
+                Dot::new(
+                    Some(home_dir_path.clone()),
+                    Some(dot_dir_path.clone()),
+                    Some(entry.file_name().to_string_lossy().to_string()),
+                    state,
+                )
             }
-            Err(_) => Dot {
-                from: None,
-                to: None,
-                file: None,
-                state: DotState::Error,
-            },
+            Err(_) => Dot::new(None, None, None, DotState::Error),
         })
         .collect();
 

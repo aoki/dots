@@ -1,140 +1,78 @@
 use anyhow::anyhow;
-use std::{
-    fs::{self},
-    path::PathBuf,
-    str::FromStr,
-};
+use colored::Colorize;
+use std::{fmt::Display, path::PathBuf};
 
-// #![warn(missing_docs)]
-
-/// ファイルのリンク状態を表します
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub enum State {
-    /// リンクされている状態です
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum DotState {
     Linked,
-
-    /// リンクされていない状態です
-    Unliked,
-
-    /// 無視されたファイルです
+    Unlinked,
     Ignored,
-
-    /// エラー
+    LinkedToOtherDirctory,
     Error,
-
-    /// それ以外の状態です（例: 読み取り不可など）
-    Other,
 }
 
-/// 設定ファイルを表す構造体です
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub struct Dotfile {
-    /// リンク元のパスです
-    pub from: Option<PathBuf>,
-
-    /// リンク先のパスです
-    pub to: Option<PathBuf>,
-
-    /// リンクの状態です
-    pub state: State,
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Dot {
+    from: Option<PathBuf>,
+    to: Option<PathBuf>,
+    file: Option<String>,
+    pub state: DotState,
+    // e: Option<Error>,
 }
 
-fn parse_tilde_and_dot(path: &PathBuf) -> anyhow::Result<PathBuf> {
-    let s = path.to_string_lossy();
-    let tilde = PathBuf::from_str(&shellexpand::tilde(&s)).map_err(|e| anyhow!(e))?;
-    let dot = fs::canonicalize::<PathBuf>(tilde).map_err(|e| anyhow!(e));
-    dot
-}
+impl Dot {
+    pub fn new(
+        from: Option<PathBuf>,
+        to: Option<PathBuf>,
+        file: Option<String>,
+        state: DotState,
+    ) -> Self {
+        Dot {
+            from,
+            to,
+            file,
+            state,
+        }
+    }
 
-impl Dotfile {
-    pub fn new(from_dir: Option<PathBuf>, to_dir: Option<PathBuf>, file: &PathBuf) -> Self {
-        let parsed_from_dir = from_dir
-            .map(|path| parse_tilde_and_dot(&path).ok())
-            .flatten();
-        let parsed_to_dir = to_dir.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
-
-        println!("FROM: {:?}", &parsed_from_dir);
-        println!("  TO: {:?}", &parsed_to_dir);
-
-        let to = parsed_to_dir.map(|dir| PathBuf::new().join(&dir).join(&file));
-        let from = parsed_from_dir.map(|dir| PathBuf::new().join(&dir).join(&file));
-
-        Dotfile {
-            from: from,
-            to: to,
-            state: State::Other,
+    pub fn file_name(&self) -> String {
+        self.file.clone().unwrap_or("".to_string())
+    }
+    pub fn from(&self) -> anyhow::Result<PathBuf> {
+        let file = match self.file.clone() {
+            Some(f) => Ok(f),
+            None => Err(anyhow!("file not found")),
+        }?;
+        match self.from.clone() {
+            Some(from) => Ok(from.join(file)),
+            None => Err(anyhow!("path not found")),
+        }
+    }
+    pub fn to(&self) -> anyhow::Result<PathBuf> {
+        let file = match self.file.clone() {
+            Some(f) => Ok(f),
+            None => Err(anyhow!("file not found")),
+        }?;
+        match self.to.clone() {
+            Some(to) => Ok(to.join(file)),
+            None => Err(anyhow!("path not found")),
         }
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    // #[test]
-    // fn resolve_path_wtih_dot_and_tilde() {
-    //     // unimplemented!()
-    // }
-    // #[test]
-    // fn new_none() {
-    //     let actual = Dotfile::new(None, None);
-    //     let expect = Dotfile {
-    //         from: None,
-    //         to: None,
-    //         state: State::Unliked,
-    //     };
-    //     assert_eq!(actual, expect);
-    // }
-
-    // #[test]
-    // fn new_invalid_link() {
-    //     let from = PathBuf::from_str("../invalid/link").ok();
-    //     let to = PathBuf::from_str("../invalid/link").ok();
-
-    //     let actual = Dotfile::new(from, to);
-    //     let expect = Dotfile {
-    //         from: None,
-    //         to: None,
-    //         state: State::Unliked,
-    //     };
-    //     assert_eq!(actual, expect);
-    // }
-
-    #[test]
-    fn new_valid_link() {
-        let dotfile_name = PathBuf::from(".samplerc");
-        let valid_from = PathBuf::from("./test-resources/test-home");
-        let valid_to = PathBuf::from("./test-resources/test-conf.d");
-
-        // Ignored
-        let expect = Dotfile {
-            from: Some(valid_from.clone()),
-            to: Some(valid_to.clone()),
-            state: State::Ignored,
+impl Display for Dot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let file = self.file.as_ref().unwrap_or(&"".to_string()).clone();
+        let icon = match self.state {
+            DotState::Linked => ("✔︎".green().bold(), file.white()),
+            DotState::Unlinked => ("✖︎".red().bold(), file.white()),
+            DotState::Ignored => ("-".black().bold(), format!("{}: ignored", file).black()),
+            DotState::LinkedToOtherDirctory => (
+                "-".black().bold(),
+                format!("{}: already linked to other file", file).black(),
+            ),
+            DotState::Error => ("-".black().bold(), file.red()),
         };
-        let actual = Dotfile::new(
-            Some(valid_from.clone()),
-            Some(valid_to.clone()),
-            &dotfile_name,
-        );
-        assert_eq!(actual, expect);
-
-        // None None
-        let expect = Dotfile {
-            from: None,
-            to: None,
-            state: State::Other,
-        };
-        let actual = Dotfile::new(None, None, &dotfile_name);
-        assert_eq!(actual, expect);
-
-        // None Some(Valid)
-        let expect = Dotfile {
-            from: None,
-            to: Some(valid_to.clone()),
-            state: State::Unliked,
-        };
-        let actual = Dotfile::new(None, Some(valid_to.clone()), &dotfile_name);
-        assert_eq!(actual, expect);
+        write!(f, "{} {}", icon.0, icon.1)
     }
 }
