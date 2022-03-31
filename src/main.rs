@@ -8,9 +8,9 @@ use skim::{
 };
 use std::{
     collections::HashSet,
-    fs,
+    fs::{self, ReadDir},
     io::Cursor,
-    path::{Path, PathBuf},
+    path::{self, Path, PathBuf},
     str::FromStr,
 };
 use std::{fs::remove_file, os::unix::fs as unix_fs};
@@ -41,7 +41,7 @@ struct Cli {
         parse(from_os_str),
         value_name = "HOME_DIRECTORY",
         env = "DOTS_HOME_DIR",
-        // default_value = "`",
+        // default_value = "~",
         default_value = "test-resources/test-home"
     )]
     home: PathBuf,
@@ -84,8 +84,8 @@ fn finder(file_list: &Vec<String>) -> anyhow::Result<Vec<String>> {
         .collect::<Vec<String>>())
 }
 
-fn filter(
-    paths: fs::ReadDir,
+fn ignore_filter(
+    paths: ReadDir,
     ignore_file_list: &HashSet<String>,
 ) -> Result<Vec<String>, anyhow::Error> {
     let target_list: Vec<String> = paths
@@ -93,32 +93,67 @@ fn filter(
         .map(|path| path.unwrap())
         .map(|e| e.file_name().to_string_lossy().to_string())
         .collect();
-    let filtered_files = file_filter(&target_list, &ignore_file_list)?;
+    file_filter(&target_list, &ignore_file_list)
+}
+
+fn filter(
+    paths: fs::ReadDir,
+    ignore_file_list: &HashSet<String>,
+) -> Result<Vec<String>, anyhow::Error> {
+    let filtered_files = ignore_filter(paths, ignore_file_list)?;
     finder(&filtered_files)
 }
 
-fn test_symlink(paths: fs::ReadDir, home_dir_path: &PathBuf) -> anyhow::Result<()> {
-    for path in paths {
-        match path {
-            Err(e) => eprintln!("{:?}, {}: {}", e, "Can't access a path".red(), e),
-            Ok(p) => {
-                let mut from = PathBuf::new();
-                from.push(&home_dir_path);
-                from.push(p.file_name());
-                match fs::read_link(Path::new(&from)) {
-                    Ok(to) => {
-                        println!(
-                            "{} {}",
-                            "✔︎".green().bold(),
-                            to.file_name().unwrap().to_string_lossy()
-                        )
-                    }
-                    Err(_) => println!("{} {}", "✖︎".red().bold(), p.file_name().to_string_lossy()),
+#[derive(Debug)]
+enum DotState {
+    Linked,
+    Unlinked,
+}
+
+#[derive(Debug)]
+struct Dot {
+    from: Option<PathBuf>,
+    to: Option<PathBuf>,
+    file: Option<String>,
+    state: DotState,
+}
+
+fn test_symlink(paths: Vec<PathBuf>, home_dir_path: &PathBuf) -> anyhow::Result<Vec<Dot>> {
+    let full_paths = paths
+        .iter()
+        .map(|path| PathBuf::from(&home_dir_path).join(path))
+        .collect::<Vec<_>>();
+    Ok(full_paths
+        .iter()
+        .map(|path| match fs::read_link(path) {
+            Ok(to) => {
+                format!(
+                    "{} {}",
+                    "✔︎".green().bold(),
+                    to.file_name().unwrap().to_string_lossy()
+                );
+                Dot {
+                    from: Some(*path),
+                    to: Some(to),
+                    file: Some(to.file_name().unwrap().to_string_lossy().to_string()),
+                    state: DotState::Linked,
                 }
             }
-        }
-    }
-    Ok(())
+            Err(_) => {
+                format!(
+                    "{} {}",
+                    "✖︎".red().bold(),
+                    path.file_name().unwrap().to_string_lossy()
+                );
+                Dot {
+                    from: Some(*path),
+                    to: None,
+                    file: Some(path.file_name().unwrap().to_string_lossy().to_string()),
+                    state: DotState::Unlinked,
+                }
+            }
+        })
+        .collect::<Vec<Dot>>())
 }
 
 fn display_target_info(
@@ -166,20 +201,6 @@ fn main() -> anyhow::Result<()> {
 
     println!("\n{}", "Dotfiles".bold());
 
-    let paths = fs::read_dir(&dot_dir_path)?;
-    let dotfiles: Vec<Dotfile> = paths
-        .map(|path| match path {
-            Ok(entry) => {
-                let dotfile_name = PathBuf::from(entry.file_name().to_string_lossy().to_string());
-                let file_path = [&dot_dir_path, &dotfile_name].iter().collect();
-                Dotfile::new(None, Some(file_path), false)
-            }
-            Err(_) => Dotfile::new(None, None, false),
-        })
-        .collect();
-
-    println!("{:?}", dotfiles);
-
     match fs::read_dir(&dot_dir_path) {
         Err(e) => eprintln!(
             "'{}' {}: {}",
@@ -188,13 +209,29 @@ fn main() -> anyhow::Result<()> {
             e
         ),
         Ok(paths) => match &cli.command {
-            Some(Commands::Test {}) | None => test_symlink(paths, &home_dir_path)?,
+            Some(Commands::Test {}) | None => {
+                let filtered_file = ignore_filter(paths, &ignore_file_list)?;
+                let pathbuf = filtered_file
+                    .iter()
+                    .map(|path| PathBuf::from(path))
+                    .collect::<Vec<PathBuf>>();
+                let result = test_symlink(pathbuf, &home_dir_path)?;
+                result.iter().for_each(|entry| println!("{:?}", entry));
+            }
             Some(Commands::Link {}) => {
                 println!(
                     "{}",
-                    "Create symlink in home directory from dot config directory".green()
+                    "Create symlink in the home directory to the dot config directory".green()
                 );
-                let selected_items = filter(paths, &ignore_file_list)?;
+                let filtered_file = ignore_filter(paths, &ignore_file_list)?;
+                let pathbuf = filtered_file
+                    .iter()
+                    .map(|path| PathBuf::from(path))
+                    .collect::<Vec<PathBuf>>();
+                let result = test_symlink(pathbuf, &home_dir_path)?;
+                let selected_items = finder(&result)?;
+                // let selected_items = filter(paths, &ignore_file_list)?;
+
                 println!("SELCTED > {:?}", &selected_items);
                 create_symlink(
                     selected_items,

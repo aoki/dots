@@ -1,5 +1,9 @@
 use anyhow::anyhow;
-use std::{fs::read_link, path::PathBuf, str::FromStr};
+use std::{
+    fs::{self, read_link},
+    path::PathBuf,
+    str::FromStr,
+};
 
 // #![warn(missing_docs)]
 
@@ -26,51 +30,44 @@ pub enum State {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Dotfile {
     /// リンク元のパスです
-    from: Option<PathBuf>,
+    pub from: Option<PathBuf>,
 
     /// リンク先のパスです
-    to: Option<PathBuf>,
+    pub to: Option<PathBuf>,
 
     /// リンクの状態です
-    state: State,
+    pub state: State,
 }
 
 fn parse_tilde_and_dot(path: &PathBuf) -> anyhow::Result<PathBuf> {
     let s = path.to_string_lossy();
-    PathBuf::from_str(&shellexpand::tilde(&s)).map_err(|e| anyhow!(e))
-    // let dot = fs::canonicalize::<PathBuf>(tilde).map_err(|e| anyhow!(e));
+    let tilde = PathBuf::from_str(&shellexpand::tilde(&s)).map_err(|e| anyhow!(e))?;
+    let dot = fs::canonicalize::<PathBuf>(tilde).map_err(|e| anyhow!(e));
+    dot
 }
 
 impl Dotfile {
-    pub fn new(from: Option<PathBuf>, to: Option<PathBuf>, is_ignore: bool) -> Self {
-        let parsed_from = from.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
-        let parsed_to = to.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
+    pub fn new(
+        from_dir: Option<PathBuf>,
+        to_dir: Option<PathBuf>,
+        file: &PathBuf,
+        is_ignore: bool,
+    ) -> Self {
+        let parsed_from_dir = from_dir
+            .map(|path| parse_tilde_and_dot(&path).ok())
+            .flatten();
+        let parsed_to_dir = to_dir.map(|path| parse_tilde_and_dot(&path).ok()).flatten();
 
-        let status = if is_ignore == true {
-            State::Ignored
-        } else {
-            match &parsed_from {
-                Some(from) => {
-                    match &parsed_to {
-                        Some(_) => match read_link(from) {
-                            Ok(_) => State::Linked,
-                            Err(e) => {
-                                // link error
-                                eprintln!("LinkERR: {:?}, {:?}", from, e);
-                                State::Other
-                            }
-                        },
-                        None => State::Unliked,
-                    }
-                }
-                None => State::Unliked,
-            }
-        };
+        println!("FROM: {:?}", &parsed_from_dir);
+        println!("  TO: {:?}", &parsed_to_dir);
+
+        let to = parsed_to_dir.map(|dir| PathBuf::new().join(&dir).join(&file));
+        let from = parsed_from_dir.map(|dir| PathBuf::new().join(&dir).join(&file));
 
         Dotfile {
-            from: parsed_from,
-            to: parsed_to,
-            state: status,
+            from: from,
+            to: to,
+            state: State::Other,
         }
     }
 }
@@ -78,8 +75,7 @@ impl Dotfile {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::dotfile;
-    use std::{os::unix::fs::symlink, str::FromStr};
+    use std::os::unix::fs::symlink;
 
     // #[test]
     // fn resolve_path_wtih_dot_and_tilde() {
@@ -112,18 +108,57 @@ mod test {
 
     #[test]
     fn new_valid_link() {
-        let dotfile_name = ".samplerc";
-        let from = PathBuf::from(format!("./test-resources/test-home/{}", dotfile_name));
-        let to = PathBuf::from(format!("./test-resources/test-conf.d/{}", dotfile_name));
+        let dotfile_name = PathBuf::from(".samplerc");
+        let valid_from = PathBuf::from("./test-resources/test-home");
+        let valid_to = PathBuf::from("./test-resources/test-conf.d");
 
-        symlink(&to, &from).ok();
-
-        let actual = Dotfile::new(Some(from.clone()), Some(to.clone()));
+        // Ignored
         let expect = Dotfile {
-            from: Some(from),
-            to: Some(to),
-            state: State::Linked,
+            from: Some(valid_from.clone()),
+            to: Some(valid_to.clone()),
+            state: State::Ignored,
         };
+        let actual = Dotfile::new(
+            Some(valid_from.clone()),
+            Some(valid_to.clone()),
+            &dotfile_name,
+            true,
+        );
         assert_eq!(actual, expect);
+
+        // None None
+        let expect = Dotfile {
+            from: None,
+            to: None,
+            state: State::Other,
+        };
+        let actual = Dotfile::new(None, None, &dotfile_name, false);
+        assert_eq!(actual, expect);
+
+        // None Some(Valid)
+        let expect = Dotfile {
+            from: None,
+            to: Some(valid_to.clone()),
+            state: State::Unliked,
+        };
+        let actual = Dotfile::new(None, Some(valid_to.clone()), &dotfile_name, false);
+        assert_eq!(actual, expect);
+
+        // None Some(InValid)
+        // Some(Inalid) None
+        // Some(Valid) None
+        // Some(Valid) Some(Valid)
+        // Some(Inalid) Some(Valid)
+        // Some(Valid) Some(InValid)
+
+        // symlink(&to, &from).ok();
+
+        // let actual = Dotfile::new(Some(from.clone()), Some(to.clone()), false);
+        // let expect = Dotfile {
+        //     from: Some(from),
+        //     to: Some(to),
+        //     state: State::Linked,
+        // };
+        // assert_eq!(actual, expect);
     }
 }
