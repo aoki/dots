@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use std::{
-    fs::{self, read_link},
+    fs::{self},
     path::PathBuf,
     str::FromStr,
 };
@@ -47,12 +47,7 @@ fn parse_tilde_and_dot(path: &PathBuf) -> anyhow::Result<PathBuf> {
 }
 
 impl Dotfile {
-    pub fn new(
-        from_dir: Option<PathBuf>,
-        to_dir: Option<PathBuf>,
-        file: &PathBuf,
-        is_ignore: bool,
-    ) -> Self {
+    pub fn new(from_dir: Option<PathBuf>, to_dir: Option<PathBuf>, file: &PathBuf) -> Self {
         let parsed_from_dir = from_dir
             .map(|path| parse_tilde_and_dot(&path).ok())
             .flatten();
@@ -75,7 +70,6 @@ impl Dotfile {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::os::unix::fs::symlink;
 
     // #[test]
     // fn resolve_path_wtih_dot_and_tilde() {
@@ -122,7 +116,6 @@ mod test {
             Some(valid_from.clone()),
             Some(valid_to.clone()),
             &dotfile_name,
-            true,
         );
         assert_eq!(actual, expect);
 
@@ -132,7 +125,7 @@ mod test {
             to: None,
             state: State::Other,
         };
-        let actual = Dotfile::new(None, None, &dotfile_name, false);
+        let actual = Dotfile::new(None, None, &dotfile_name);
         assert_eq!(actual, expect);
 
         // None Some(Valid)
@@ -141,24 +134,7 @@ mod test {
             to: Some(valid_to.clone()),
             state: State::Unliked,
         };
-        let actual = Dotfile::new(None, Some(valid_to.clone()), &dotfile_name, false);
+        let actual = Dotfile::new(None, Some(valid_to.clone()), &dotfile_name);
         assert_eq!(actual, expect);
-
-        // None Some(InValid)
-        // Some(Inalid) None
-        // Some(Valid) None
-        // Some(Valid) Some(Valid)
-        // Some(Inalid) Some(Valid)
-        // Some(Valid) Some(InValid)
-
-        // symlink(&to, &from).ok();
-
-        // let actual = Dotfile::new(Some(from.clone()), Some(to.clone()), false);
-        // let expect = Dotfile {
-        //     from: Some(from),
-        //     to: Some(to),
-        //     state: State::Linked,
-        // };
-        // assert_eq!(actual, expect);
     }
 }
